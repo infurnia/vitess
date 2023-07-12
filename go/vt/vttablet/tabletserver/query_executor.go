@@ -120,6 +120,7 @@ func (qre *QueryExecutor) Execute() (reply *sqltypes.Result, err error) {
 	defer func(start time.Time) {
 		duration := time.Since(start)
 		qre.tsv.stats.QueryTimings.Add(planName, duration)
+		qre.tsv.stats.QueryTimingsByTabletType.Add(qre.tabletType.String(), duration)
 		qre.recordUserQuery("Execute", int64(duration))
 
 		mysqlTime := qre.logStats.MysqlResponseTime
@@ -309,6 +310,7 @@ func (qre *QueryExecutor) Stream(callback StreamCallback) error {
 
 	defer func(start time.Time) {
 		qre.tsv.stats.QueryTimings.Record(qre.plan.PlanID.String(), start)
+		qre.tsv.stats.QueryTimingsByTabletType.Record(qre.tabletType.String(), start)
 		qre.recordUserQuery("Stream", int64(time.Since(start)))
 	}(time.Now())
 
@@ -398,6 +400,7 @@ func (qre *QueryExecutor) MessageStream(callback StreamCallback) error {
 
 	defer func(start time.Time) {
 		qre.tsv.stats.QueryTimings.Record(qre.plan.PlanID.String(), start)
+		qre.tsv.stats.QueryTimingsByTabletType.Record(qre.tabletType.String(), start)
 		qre.recordUserQuery("MessageStream", int64(time.Since(start)))
 	}(time.Now())
 
