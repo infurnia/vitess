@@ -27,6 +27,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"vitess.io/vitess/go/vt/proto/topodata"
+
 	vtrpcpb "vitess.io/vitess/go/vt/proto/vtrpc"
 	"vitess.io/vitess/go/vt/vterrors"
 
@@ -172,7 +174,7 @@ type QueryEngine struct {
 
 	// stats
 	// Note: queryErrorCountsWithCode is similar to queryErrorCounts except it contains error code as an additional dimension
-	queryCounts, queryTimes, queryErrorCounts, queryErrorCountsWithCode, queryRowsAffected, queryRowsReturned *stats.CountersWithMultiLabels
+	queryCounts, queryCountsWithTabletType, queryTimes, queryErrorCounts, queryErrorCountsWithCode, queryRowsAffected, queryRowsReturned *stats.CountersWithMultiLabels
 
 	// stats flags
 	enablePerWorkloadTableMetrics bool
@@ -258,6 +260,7 @@ func NewQueryEngine(env tabletenv.Env, se *schema.Engine) *QueryEngine {
 	}
 
 	qe.queryCounts = env.Exporter().NewCountersWithMultiLabels("QueryCounts", "query counts", labels)
+	qe.queryCountsWithTabletType = env.Exporter().NewCountersWithMultiLabels("QueryCountsWithTabletType", "query counts with tablet type labels", []string{"Table", "Plan", "TabletType"})
 	qe.queryTimes = env.Exporter().NewCountersWithMultiLabels("QueryTimesNs", "query times in ns", labels)
 	qe.queryRowsAffected = env.Exporter().NewCountersWithMultiLabels("QueryRowsAffected", "query rows affected", labels)
 	qe.queryRowsReturned = env.Exporter().NewCountersWithMultiLabels("QueryRowsReturned", "query rows returned", labels)
@@ -490,7 +493,7 @@ func (qe *QueryEngine) QueryPlanCacheLen() int {
 }
 
 // AddStats adds the given stats for the planName.tableName
-func (qe *QueryEngine) AddStats(planType planbuilder.PlanType, tableName, workload string, queryCount int64, duration, mysqlTime time.Duration, rowsAffected, rowsReturned, errorCount int64, errorCode string) {
+func (qe *QueryEngine) AddStats(planType planbuilder.PlanType, tableName, workload string, tabletType topodata.TabletType, queryCount int64, duration, mysqlTime time.Duration, rowsAffected, rowsReturned, errorCount int64, errorCode string) {
 	// table names can contain "." characters, replace them!
 	keys := []string{tableName, planType.String()}
 	// Only use the workload as a label if that's enabled in the configuration.
@@ -500,6 +503,9 @@ func (qe *QueryEngine) AddStats(planType planbuilder.PlanType, tableName, worklo
 	qe.queryCounts.Add(keys, queryCount)
 	qe.queryTimes.Add(keys, int64(duration))
 	qe.queryErrorCounts.Add(keys, errorCount)
+
+	qe.queryCountsWithTabletType.Add([]string{tableName, planType.String(), tabletType.String()}, queryCount)
+
 	// queryErrorCountsWithCode is similar to queryErrorCounts except we have an additional dimension
 	// of error code.
 	if errorCount > 0 {
